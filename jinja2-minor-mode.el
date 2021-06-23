@@ -61,69 +61,108 @@
   :type '(repeat string)
   :group 'jinja2)
 
+(defcustom jinja2-user-filters nil
+  "Custom user filters."
+  :type '(repeat string)
+  :group 'jinja2)
+
 (defcustom jinja2-user-functions nil
   "Custom user functions."
   :type '(repeat string)
   :group 'jinja2)
 
-(defun jinja2-builtin-keywords ()
+(defconst jinja2-builtin-blocks
+  '("block" "for" "if" "raw" "macro" "set"
+    "filter" "call" "trans" "with"
+    "autoescape"))
+
+(defconst jinja2-builtin-constants
+  '("True" "False" "true" "false" "None" "none"))
+
+(defconst jinja2-builtin-filters
+  '("abs" "attr" "batch" "capitalize"
+    "center" "default" "dictsort"
+    "escape" "filesizeformat" "first"
+    "float" "forceescape" "format"
+    "groupby" "indent" "int" "join"
+    "last" "length" "list" "lower"
+    "map" "max" "min" "pprint"
+    "random" "reject" "rejectattr"
+    "replace"
+    "reverse" "round" "safe" "select" "selectattr" "slice"
+    "sort" "string" "striptags" "sum"
+    "title" "tojson" "trim" "truncate" "unique" "upper"
+    "urlencode"
+    "urlize" "wordcount" "wordwrap" "xmlattr"))
+
+(defconst jinja2-builtin-tests
+  '("callable" "defined" "divisibleby"
+    "eq" "escaped" "even" "ge" "gt" "in"
+    "iterable" "le" "lower" "lt" "mapping"
+    "ne" "none" "number" "odd" "sameas"
+    "sequence" "string" "undefined" "upper"))
+
+(defconst jinja2-builtin-functions
+  '("range" "lipsum" "dict" "cycler"
+    "reset" "next" "current" "joiner"
+    "namespace"))
+
+(defconst jinja2-builtin-keywords
+  '("import" "extends" "in" "scoped" "from" "as" "include"
+    "ignore" "missing" "with" "without" "elif" "else" "not"
+    "and" "or" "is" "pluralize" "do" "continue" "break"
+    "set" "super"))
+
+(defun jinja2-list-keywords ()
   "Jinja2 keywords."
   (append
    jinja2-user-keywords
-   '("if" "for" "block" "filter" "with"
-     "raw" "macro" "autoescape" "trans" "call"
-     "else" "elif" "end"
-     "as" "autoescape" "debug" "extends"
-     "firstof" "in" "include" "load"
-     "now" "regroup" "ssi" "templatetag"
-     "url" "widthratio" "elif" "true"
-     "false" "none" "False" "True" "None"
-     "loop" "super" "caller" "varargs"
-     "kwargs" "break" "continue" "is"
-     "not" "or" "and"
-     "do" "pluralize" "set" "from" "import"
-     "context" "with" "without" "ignore"
-     "missing" "scoped")))
+   jinja2-builtin-keywords))
 
-(defun jinja2-builtin-functions ()
-  "Jinja2 builtin functions."
+(defun jinja2-list-filters ()
+  "Jinja2 filters."
+  (append
+   jinja2-user-filters
+   jinja2-builtin-filters))
+
+(defun jinja2-list-functions ()
+  "Jinja2 functions."
   (append
    jinja2-user-functions
-   '("abs" "attr" "batch" "capitalize"
-     "center" "default" "dictsort"
-     "escape" "filesizeformat" "first"
-     "float" "forceescape" "format"
-     "groupby" "indent" "int" "join"
-     "last" "length" "list" "lower"
-     "pprint" "random" "replace"
-     "reverse" "round" "safe" "slice"
-     "sort" "string" "striptags" "sum"
-     "title" "trim" "truncate" "upper"
-     "urlize" "wordcount" "wordwrap" "xmlattr")))
-
-(defconst jinja2-font-lock-keywords
-  `(
-    (,(rx-to-string `(and word-start ,(append '(or) (jinja2-builtin-keywords)) word-end))
-     (0 font-lock-keyword-face))
-    (,(rx-to-string `(and word-start ,(append '(or) (jinja2-builtin-functions)) word-end))
-     (0 font-lock-builtin-face))
-
-    (,(rx (or "{%" "%}" "{%-" "-%}")) (0 font-lock-type-face t))
-    (,(rx (or "{{" "}}")) (0 font-lock-type-face t))
-    (,(rx "{#"
-          (* whitespace)
-          (group
-           (*? anything))
-          (* whitespace)
-          "#}")
-     (1 font-lock-comment-face t))
-    (,(rx (or "{#" "#}")) (0 font-lock-comment-delimiter-face t))
-    ))
+   jinja2-builtin-functions))
 
 (defun jinja2-register-keywords (addp)
   "Install/remove jinja2 keywords in current buffer. If ADDP is non-nil, install else remove."
   (funcall (if addp 'font-lock-add-keywords 'font-lock-remove-keywords)
-           nil jinja2-font-lock-keywords))
+           nil `(
+                 (,(rx-to-string `(seq word-start ,(append '(or) (jinja2-list-keywords)) word-end))
+                  (0 font-lock-keyword-face))
+                 (,(rx-to-string `(seq word-start ,(append '(or) (jinja2-list-functions)) word-end))
+                  (0 font-lock-builtin-face))
+                 (,(rx-to-string `(seq word-start (group (+ word)) word-end (* whitespace) "("))
+                  (1 font-lock-function-name-face))
+                 (,(rx (seq "|" (* whitespace) word-start (group (eval (append '(or) (jinja2-list-filters)))) word-end))
+                  (1 font-lock-builtin-face))
+                 (,(rx (seq word-start (eval (append '(or) jinja2-builtin-tests)) word-end))
+                  (0 font-lock-builtin-face))
+                 (,(rx (seq word-start (eval (append '(or) jinja2-builtin-constants)) word-end))
+                  (0 font-lock-constant-face))
+                 (,(rx (seq word-start (eval (append '(or) jinja2-builtin-blocks)) word-end))
+                  (0 font-lock-keyword-face))
+                 (,(rx (seq word-start (eval (append '(or) (mapcar (lambda (s) (concat "end" s)) jinja2-builtin-blocks))) word-end))
+                  (0 font-lock-keyword-face))
+                 (,(rx (or "{%" "%}" "{%-" "-%}" "{%+")) (0 font-lock-preprocessor-face t))
+                 (,(rx (or "{{" "}}")) (0 font-lock-preprocessor-face t))
+                 (,(rx (or "{#" "#}")) (0 font-lock-comment-delimiter-face t))
+                 (,(rx (seq
+                        "{#"
+                        (* whitespace)
+                        (group
+                         (*? anything))
+                        (* whitespace)
+                        "#}"))
+                  (1 font-lock-comment-face t))
+                 )))
 
 
 ;;;###autoload
