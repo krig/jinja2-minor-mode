@@ -1,5 +1,5 @@
-;;; jinja2-minor-mode --- Jinja2 template minor mode
 ;; -*- coding: utf-8; lexical-binding: t -*-
+;;; jinja2-minor-mode --- Jinja2 template minor mode
 
 ;; Copyright (C) 2021 Kristoffer Grönlund
 
@@ -131,38 +131,58 @@
    jinja2-user-functions
    jinja2-builtin-functions))
 
+(defun jinja2-templatep (limit)
+  "True if point is inside a jinja2 template scope, looking no further than LIMIT."
+  (save-excursion
+    (goto-char (point-at-bol))
+    (while (search-forward "{" nil t)
+      (let ((pos (point)))
+        )))
+  (let ((result (save-excursion
+                  (re-search-backward (rx (or "{%" "{{" "{%-" "{%+")) (point-at-bol) t))))
+    (message "Result: %s Point: %s BOL: %s" result (point) (point-at-bol))
+    result))
+
+(defun jinja2-matcher (re)
+  "Return a function to match RE in a jinja context."
+  (lambda (limit)
+    (and (jinja2-templatep limit) (re-search-forward re (min (point-at-eol) limit) t))))
+
 (defun jinja2-register-keywords (addp)
   "Install/remove jinja2 keywords in current buffer. If ADDP is non-nil, install else remove."
-  (funcall (if addp 'font-lock-add-keywords 'font-lock-remove-keywords)
-           nil `(
-                 (,(rx-to-string `(seq word-start ,(append '(or) (jinja2-list-keywords)) word-end))
-                  (0 font-lock-keyword-face))
-                 (,(rx-to-string `(seq word-start ,(append '(or) (jinja2-list-functions)) word-end))
-                  (0 font-lock-builtin-face))
-                 (,(rx-to-string `(seq word-start (group (+ word)) word-end (* whitespace) "("))
-                  (1 font-lock-function-name-face))
-                 (,(rx (seq "|" (* whitespace) word-start (group (eval (append '(or) (jinja2-list-filters)))) word-end))
-                  (1 font-lock-builtin-face))
-                 (,(rx (seq word-start (eval (append '(or) jinja2-builtin-tests)) word-end))
-                  (0 font-lock-builtin-face))
-                 (,(rx (seq word-start (eval (append '(or) jinja2-builtin-constants)) word-end))
-                  (0 font-lock-constant-face))
-                 (,(rx (seq word-start (eval (append '(or) jinja2-builtin-blocks)) word-end))
-                  (0 font-lock-keyword-face))
-                 (,(rx (seq word-start (eval (append '(or) (mapcar (lambda (s) (concat "end" s)) jinja2-builtin-blocks))) word-end))
-                  (0 font-lock-keyword-face))
-                 (,(rx (or "{%" "%}" "{%-" "-%}" "{%+")) (0 font-lock-preprocessor-face t))
-                 (,(rx (or "{{" "}}")) (0 font-lock-preprocessor-face t))
-                 (,(rx (or "{#" "#}")) (0 font-lock-comment-delimiter-face t))
-                 (,(rx (seq
-                        "{#"
-                        (* whitespace)
-                        (group
-                         (*? anything))
-                        (* whitespace)
-                        "#}"))
-                  (1 font-lock-comment-face t))
-                 )))
+  (let ((keywords
+         `(
+           (,(jinja2-matcher (rx-to-string `(seq word-start ,(append '(or) (jinja2-list-keywords)) word-end)))
+            (0 font-lock-keyword-face))
+           (,(jinja2-matcher (rx-to-string `(seq word-start ,(append '(or) (jinja2-list-functions)) word-end)))
+            (0 font-lock-builtin-face))
+           (,(jinja2-matcher (rx-to-string `(seq word-start (group (+ word)) word-end (* whitespace) "(")))
+            (1 font-lock-function-name-face))
+           (,(jinja2-matcher (rx (seq "|" (* whitespace) word-start (group (eval (append '(or) (jinja2-list-filters)))) word-end)))
+            (1 font-lock-builtin-face))
+           (,(jinja2-matcher (rx (seq word-start (eval (append '(or) jinja2-builtin-tests)) word-end)))
+            (0 font-lock-builtin-face))
+           (,(jinja2-matcher (rx (seq word-start (eval (append '(or) jinja2-builtin-constants)) word-end)))
+            (0 font-lock-constant-face))
+           (,(jinja2-matcher (rx (seq word-start (eval (append '(or) jinja2-builtin-blocks)) word-end)))
+            (0 font-lock-keyword-face))
+           (,(jinja2-matcher (rx (seq word-start (eval (append '(or) (mapcar (lambda (s) (concat "end" s)) jinja2-builtin-blocks))) word-end)))
+            (0 font-lock-keyword-face))
+           (,(rx (or "{%" "%}" "{%-" "-%}" "{%+")) (0 font-lock-preprocessor-face t))
+           (,(rx (or "{{" "}}")) (0 font-lock-preprocessor-face t))
+           (,(rx (or "{#" "#}")) (0 font-lock-comment-delimiter-face t))
+           (,(rx (seq
+                  "{#"
+                  (* whitespace)
+                  (group
+                   (*? anything))
+                  (* whitespace)
+                  "#}"))
+            (1 font-lock-comment-face t))
+           )))
+    (if addp
+        (font-lock-add-keywords nil keywords)
+      (font-lock-remove-keywords nil keywords))))
 
 
 ;;;###autoload
